@@ -130,54 +130,85 @@ with tab1:
 # --------------------------------------------------
 # TAB 2: Task 4 (10 Unseen Images Performance)
 # --------------------------------------------------
+def run_eval(samples):
+    """samples: list of (image_source, true_label). source = path or file-like."""
+    failed_cases = []
+
+    st.write("### 測試矩陣：")
+    cols = st.columns(5)
+    for i, (src, true_label) in enumerate(samples):
+        img = Image.open(src).convert('RGB')
+        feat = extract_single_feature(img)
+        pred_label = db['knn_model'].predict([feat])[0]
+
+        correct = (pred_label == true_label)
+        if not correct:
+            failed_cases.append((img, true_label, pred_label))
+
+        with cols[i % 5]:
+            st.image(img, width="stretch")
+            t_str = "貓" if true_label == 0 else "狗"
+            p_str = "貓" if pred_label == 0 else "狗"
+            if correct:
+                st.success(f"真實:{t_str} | 預測:{p_str}")
+            else:
+                st.error(f"真實:{t_str} | 預測:{p_str}")
+        if i == 4:
+            st.divider()
+
+    st.divider()
+    st.subheader("⚠️ 失敗案例視覺化與分析 (Failed Cases)")
+    if len(failed_cases) == 0:
+        st.balloons()
+        st.success("🎉 完美！全部分類正確！")
+    else:
+        f_cols = st.columns(len(failed_cases))
+        for i, (img, t_l, p_l) in enumerate(failed_cases):
+            with f_cols[i]:
+                st.image(img, width="stretch")
+                st.caption(f"真實: {'貓' if t_l == 0 else '狗'} ➔ 錯判為: {'貓' if p_l == 0 else '狗'}")
+
+        st.markdown("""
+        **失敗原因分析 (Failure Analysis)：**
+        1. **背景佔比過高**：背景（如草地、床單）佔用過多特徵空間。
+        2. **視角/特寫特殊**：極端特寫（如只照到鼻子）會丟失耳形與臉型特徵。
+        3. **特徵空間重疊**：部分長毛小型犬特徵與貓咪較為接近。
+        """)
+
+
 with tab2:
     st.subheader("10 張未見圖片測試 (Performance on 10 Unseen Images)")
 
-    if st.button("開始評估 10 張未見圖片"):
-        cats = glob.glob("dataset/unseen_cat/*")[:5]
-        dogs = glob.glob("dataset/unseen_dog/*")[:5]
-        test_samples = [(p, 0) for p in cats] + [(p, 1) for p in dogs]
+    mode = st.radio("選擇測試方式：", ["🎲 隨機抽取 (從 20 張未見圖片)", "📤 手動上傳 10 張照片"])
 
-        failed_cases = []
+    if mode.startswith("🎲"):
+        cats_pool = glob.glob("dataset/unseen_cat/*")
+        dogs_pool = glob.glob("dataset/unseen_dog/*")
+        st.caption(f"未見圖片池：貓 {len(cats_pool)} 張 + 狗 {len(dogs_pool)} 張 = {len(cats_pool) + len(dogs_pool)} 張")
 
-        st.write("### 測試矩陣：")
-        cols = st.columns(5)
-        for i, (path, true_label) in enumerate(test_samples):
-            img = Image.open(path)
-            feat = extract_single_feature(img)
-            pred_label = db['knn_model'].predict([feat])[0]
+        if st.button("🎲 隨機抽 10 張並開始評估"):
+            rng = np.random.RandomState()
+            cats = rng.choice(cats_pool, size=5, replace=False)
+            dogs = rng.choice(dogs_pool, size=5, replace=False)
+            test_samples = [(c, 0) for c in cats] + [(d, 1) for d in dogs]
+            rng.shuffle(test_samples)
+            run_eval(test_samples)
 
-            correct = (pred_label == true_label)
-            if not correct:
-                failed_cases.append((path, true_label, pred_label))
+    else:
+        st.caption("請手動上傳 10 張未見圖片 (真實類別由你指定)。")
+        col_c, col_d = st.columns(2)
+        with col_c:
+            up_cats = st.file_uploader("🐱 上傳貓咪圖片 (可多選)", type=["jpg", "jpeg", "png"],
+                                       accept_multiple_files=True, key="up_cats")
+        with col_d:
+            up_dogs = st.file_uploader("🐶 上傳狗狗圖片 (可多選)", type=["jpg", "jpeg", "png"],
+                                       accept_multiple_files=True, key="up_dogs")
 
-            with cols[i % 5]:
-                st.image(img, width="stretch")
-                t_str = "貓" if true_label == 0 else "狗"
-                p_str = "貓" if pred_label == 0 else "狗"
-                if correct:
-                    st.success(f"真實:{t_str} | 預測:{p_str}")
-                else:
-                    st.error(f"真實:{t_str} | 預測:{p_str}")
-            if i == 4:
-                st.divider()
-
-        # 失敗案例展示 (Failed Cases)
-        st.divider()
-        st.subheader("⚠️ 失敗案例視覺化與分析 (Failed Cases)")
-        if len(failed_cases) == 0:
-            st.balloons()
-            st.success("🎉 完美！10 張未見圖片全部分類正確！")
-        else:
-            f_cols = st.columns(len(failed_cases))
-            for i, (path, t_l, p_l) in enumerate(failed_cases):
-                with f_cols[i]:
-                    st.image(path, width="stretch")
-                    st.caption(f"真實: {'貓' if t_l == 0 else '狗'} ➔ 錯判為: {'貓' if p_l == 0 else '狗'}")
-
-            st.markdown("""
-            **失敗原因分析 (Failure Analysis)：**
-            1. **背景佔比過高**：背景（如草地、床單）佔用過多特徵空間。
-            2. **視角/特寫特殊**：極端特寫（如只照到鼻子）會丟失耳形與臉型特徵。
-            3. **特徵空間重疊**：部分長毛小型犬特徵與貓咪較為接近。
-            """)
+        if st.button("開始評估上傳圖片"):
+            samples = [(f, 0) for f in up_cats] + [(f, 1) for f in up_dogs]
+            samples = samples[:10]
+            if len(samples) == 0:
+                st.warning("請先上傳至少一張圖片！")
+            else:
+                st.caption(f"已選取 {len(samples)} 張圖片開始評估")
+                run_eval(samples)
