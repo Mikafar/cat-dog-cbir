@@ -1,5 +1,6 @@
 import streamlit as st
 import pickle
+import os
 import numpy as np
 from PIL import Image
 import torch
@@ -27,7 +28,16 @@ def load_resnet():
 @st.cache_data
 def load_db():
     with open("cbir_knn_data.pkl", "rb") as f:
-        return pickle.load(f)
+        db = pickle.load(f)
+    keep = [i for i, p in enumerate(db['image_paths']) if os.path.exists(p)]
+    if len(keep) < len(db['image_paths']):
+        print(f"WARNING: filtering out {len(db['image_paths']) - len(keep)} missing image(s)")
+    return {
+        'features': db['features'][keep],
+        'image_paths': [db['image_paths'][i] for i in keep],
+        'labels': db['labels'][keep],
+        'knn_model': db['knn_model'],
+    }
 
 
 resnet, device = load_resnet()
