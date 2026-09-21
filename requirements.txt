@@ -1,0 +1,7 @@
+streamlit==1.64.0
+numpy
+pillow
+scikit-learn
+torch
+torchvision
+requests
