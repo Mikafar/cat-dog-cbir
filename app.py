@@ -60,18 +60,34 @@ tab1, tab2 = st.tabs(["🔍 上傳查詢：相似檢索與 KNN 分類", "📊 10
 # TAB 1: 整合 Task 2 & Task 3
 # --------------------------------------------------
 with tab1:
-    uploaded_file = st.file_uploader("選擇上傳一張貓或狗的圖片...", type=["jpg", "jpeg", "png"])
+    c_sample, c_upload = st.columns([1, 3])
+    with c_sample:
+        if st.button("🎲 使用一張範例查詢圖片"):
+            st.session_state['sample_query'] = Image.open(np.random.choice(sorted(glob.glob("dataset/*/*"))))
+            if 'uploaded_query' in st.session_state:
+                del st.session_state['uploaded_query']
+    with c_upload:
+        uploaded_file = st.file_uploader("選擇上傳一張貓或狗的圖片...", type=["jpg", "jpeg", "png"],
+                                         key="query_uploader")
 
     if uploaded_file is not None:
-        query_img = Image.open(uploaded_file)
+        st.session_state['uploaded_query'] = Image.open(uploaded_file)
+        if 'sample_query' in st.session_state:
+            del st.session_state['sample_query']
+
+    query_img = st.session_state.get('uploaded_query') or st.session_state.get('sample_query')
+
+    if query_img is not None:
+        is_sample = 'uploaded_query' not in st.session_state and 'sample_query' in st.session_state
 
         col_q, col_res = st.columns([1, 2])
 
         with col_q:
-            st.image(query_img, caption="上傳的 Query Image", width="stretch")
+            st.image(query_img, caption="範例查詢圖片 (Sample)" if is_sample else "上傳的 Query Image",
+                     width="stretch")
             query_feat = extract_single_feature(query_img)
 
-            # KNN 分類預測 (Task 3)
+            # KNN 分類預測
             pred = db['knn_model'].predict([query_feat])[0]
             proba = db['knn_model'].predict_proba([query_feat])[0]
             label_text = "🐱 貓 (Cat)" if pred == 0 else "🐶 狗 (Dog)"
@@ -79,7 +95,7 @@ with tab1:
             st.success(f"**KNN 分類結果**：{label_text}")
             st.write(f"Confidence (信心度)：貓 {proba[0] * 100:.1f}% | 狗 {proba[1] * 100:.1f}%")
 
-        # 計算 Cosine Similarity (Task 2)
+        # 計算 Cosine Similarity
         sims = cosine_similarity([query_feat], db['features'])[0]
         sorted_indices = np.argsort(sims)[::-1]
 
